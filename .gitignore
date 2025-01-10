@@ -1,2 +1,7 @@
 data
 *.pth
+venv/
+./diffusion/data
+*.pth
+diffusion/abstract_art/
+*/__pycache__/
