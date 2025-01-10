@@ -1,6 +1,6 @@
 Overview:
 
-This folder contains an implementation of diffusion models utilizing U-Net architectures enhanced with self-attention mechanisms. The model is designed to generate images through a structured noise scheduling process.
+This folder/[notebook](./diffusion_model.ipynb) contains an implementation of diffusion models utilizing U-Net architectures enhanced with self-attention mechanisms. The model is designed to generate images through a structured noise scheduling process.
 
 Components:
 
