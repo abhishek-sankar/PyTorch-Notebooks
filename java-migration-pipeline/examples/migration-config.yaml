@@ -1,0 +1,27 @@
+# Example configuration for Java Migration Pipeline
+
+# Project settings
+project_path: /path/to/your/java/project
+project_name: MyJavaApplication
+build_tool: maven  # or gradle
+
+# OpenRewrite settings
+openrewrite_version: 2.0.0
+skip_recipes: []  # Add recipes to skip if needed
+custom_recipes: []  # Add custom recipe names
+
+# AI Agent settings
+llm_provider: anthropic  # or openai
+llm_model: claude-3-5-sonnet-20241022  # or gpt-4-turbo
+max_repair_attempts: 100
+repair_timeout_minutes: 120
+
+# Pipeline settings
+commit_strategy: atomic  # or batch
+create_pull_request: true
+branch_name: migration/java21-spring3
+
+# Quality settings
+run_tests_after_each_fix: false  # Set to true for safer but slower migration
+required_test_coverage: 80.0
+static_analysis_enabled: true
