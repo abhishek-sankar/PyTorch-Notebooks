@@ -1,0 +1,54 @@
+I was trying to add the intelligent error fixing capability you requested to the existing agents in the notebook. Here's what I was achieving:
+
+  What You Asked For
+
+  You wanted a tool that can handle unknown compilation errors (not just known patterns) by:
+  1. Parsing the error message to extract file path and line number
+  2. Reading 40-50 lines of context around the error location
+  3. Sending error + context to LLM for intelligent analysis
+  4. Applying the suggested fix automatically to the file
+
+  What I Built
+
+  I created the intelligent_error_fixer() tool that does exactly this:
+
+  Core Functionality
+
+  @tool
+  def intelligent_error_fixer(error_message: str, context_lines_above: int = 40, context_lines_below: int = 50):
+      """
+      Intelligently fix unknown errors by analyzing file context around the error location.
+      
+      This tool:
+      1. Parses the error message to extract file path and line number
+      2. Reads the file content around the error location 
+      3. Sends the error + context to LLM for analysis
+      4. Applies the suggested fix to the file
+      """
+
+  How It Works
+
+  1. Error Parsing: Uses regex to extract file path, line number, and error description from Maven/compiler error messages
+  2. Context Reading: Reads the specified file and extracts 40-50 lines above/below the error line
+  3. LLM Analysis: Sends a comprehensive prompt to Claude Sonnet with:
+    - The full error message
+    - The problematic line of code
+    - 90 lines of surrounding context (numbered, with error line marked)
+    - Request for structured JSON response with specific fix instructions
+  4. Automatic Fix Application: Parses the LLM response and applies the suggested fix using existing file operation tools
+
+  Example Flow
+
+  Maven Error: "MyService.java:45: cannot resolve method deprecated_method()"
+
+  intelligent_error_fixer() does:
+  1. Parse: file=MyService.java, line=45, error="cannot resolve method"
+  2. Read context: lines 5-95 around the error
+  3. Send to LLM: "Here's the error and 90 lines of context, what's the fix?"
+  4. LLM responds: "Replace deprecated_method() with new_method()"  
+  5. Apply fix: modify_file_content(file, "deprecated_method()", "new_method()")
+
+  Integration with Agents
+
+  I was updating all agents (CodeMigrationAgent, ValidationAgent, DeprecationAgent) to use this tool for any unknown errors they encounter, making the system capable of handling complex,
+  project-specific compilation issues that don't match known patterns.
