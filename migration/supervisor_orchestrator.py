@@ -210,8 +210,10 @@ Be systematic and intelligent about which agent to call next based on the curren
         return workflow
     
     def migrate_project(self, project_path: str) -> Dict[str, Any]:
-        """Start supervised migration"""
-        print(f"Starting supervised migration for: {project_path}")
+        """Start supervised migration with detailed progress tracking"""
+        print("="*80)
+        print(f"STARTING SUPERVISED MIGRATION: {project_path}")
+        print("="*80)
         
         if not os.path.exists(project_path):
             return {"success": False, "error": f"Project path does not exist: {project_path}"}
@@ -235,17 +237,31 @@ Start by analyzing the project."""
         try:
             start_time = datetime.now()
             
-            # Invoke supervisor workflow
-            result = self.app.invoke({
+            print(f"\nSupervisor: Starting migration workflow...")
+            print(f"Supervisor: Available workers: {[agent.name for agent in self.migration_workers]}")
+            print("-" * 60)
+            
+            # Stream the workflow execution with progress tracking
+            step_count = 0
+            for chunk in self.app.stream({
+                "messages": [{"role": "user", "content": migration_request}]
+            }):
+                step_count += 1
+                self._log_workflow_step(step_count, chunk)
+            
+            # Get final result
+            final_result = self.app.invoke({
                 "messages": [{"role": "user", "content": migration_request}]
             })
             
             duration = datetime.now() - start_time
             
-            print(f"Supervised migration completed in {duration.total_seconds():.2f} seconds")
+            print("\n" + "="*80)
+            print(f"SUPERVISED MIGRATION COMPLETED in {duration.total_seconds():.2f} seconds")
+            print("="*80)
             
             # Extract final result
-            messages = result.get("messages", [])
+            messages = final_result.get("messages", [])
             final_message = messages[-1] if messages else {}
             final_content = final_message.get("content", "No final message") if isinstance(final_message, dict) else str(final_message)
             
@@ -253,19 +269,79 @@ Start by analyzing the project."""
                 "success": True,
                 "result": final_content,
                 "duration": duration.total_seconds(),
-                "messages": len(messages)
+                "messages": len(messages),
+                "steps": step_count
             }
             
         except Exception as e:
-            print(f"Supervised migration failed: {str(e)}")
+            print(f"\nSUPERVISOR ERROR: {str(e)}")
             return {
                 "success": False,
                 "error": str(e)
             }
+    
+    def _log_workflow_step(self, step_count: int, chunk: Dict[str, Any]):
+        """Log detailed information about each workflow step"""
+        print(f"\n[STEP {step_count}] " + "="*50)
+        
+        if not chunk:
+            print("Empty chunk received")
+            return
+        
+        for node_name, node_data in chunk.items():
+            print(f"NODE: {node_name}")
+            
+            # Check if this is a worker agent being called
+            if node_name in ["analysis_expert", "execution_expert", "error_expert"]:
+                print(f"  -> Calling {node_name.replace('_', ' ').title()}")
+                
+            # Show messages if available
+            if isinstance(node_data, dict) and "messages" in node_data:
+                messages = node_data["messages"]
+                print(f"  Messages: {len(messages)}")
+                
+                for i, msg in enumerate(messages[-2:]):  # Show last 2 messages
+                    msg_content = ""
+                    if isinstance(msg, dict):
+                        msg_content = msg.get("content", str(msg))
+                        msg_type = msg.get("type", "unknown")
+                        msg_name = msg.get("name", "")
+                    else:
+                        msg_content = getattr(msg, "content", str(msg))
+                        msg_type = getattr(msg, "type", "unknown")
+                        msg_name = getattr(msg, "name", "")
+                    
+                    # Show message type and source
+                    if msg_name:
+                        print(f"    [{msg_type}] from {msg_name}:")
+                    else:
+                        print(f"    [{msg_type}]:")
+                    
+                    # Show content preview
+                    if msg_content:
+                        content_preview = str(msg_content)[:200] + ("..." if len(str(msg_content)) > 200 else "")
+                        print(f"      {content_preview}")
+                    
+                    # Show tool calls if present
+                    if isinstance(msg, dict) and "tool_calls" in msg:
+                        for tool_call in msg["tool_calls"]:
+                            tool_name = tool_call.get("name", "unknown")
+                            print(f"      TOOL CALL: {tool_name}")
+                    elif hasattr(msg, "tool_calls") and msg.tool_calls:
+                        for tool_call in msg.tool_calls:
+                            tool_name = getattr(tool_call, "name", "unknown")
+                            print(f"      TOOL CALL: {tool_name}")
+            
+            # Show other data if not messages
+            elif node_data and str(node_data) != "{}":
+                data_preview = str(node_data)[:150] + ("..." if len(str(node_data)) > 150 else "")
+                print(f"  Data: {data_preview}")
+        
+        print("-" * 60)
 
 
 if __name__ == "__main__":
-    project_path = "/Users/abhisheksankar/Desktop/PyTorch-Notebooks/migration/xsync"
+    project_path = "/Users/abhisheksankar/Desktop/PyTorch-Notebooks/migration/flatworm"
     
     orchestrator = SupervisorMigrationOrchestrator()
     result = orchestrator.migrate_project(project_path)
