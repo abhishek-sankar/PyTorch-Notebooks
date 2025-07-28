@@ -1,0 +1,53 @@
+name: "Migration Recipe Identification"
+description: "Identifies appropriate migration recipes based on deprecation analysis"
+template: |
+  You are a Java migration expert. Based on the deprecation analysis, identify the most appropriate migration recipes to apply.
+
+  **Deprecation Analysis:**
+  ```json
+  {analysis_results}
+  ```
+
+  **Available Migration Recipes:**
+  {available_recipes}
+
+  **Task:**
+  1. Match each deprecated API to the most appropriate migration recipe
+  2. Prioritize recipes by impact and complexity
+  3. Group related changes that should be applied together
+  4. Identify any custom recipes needed for unique cases
+
+  **Output format:**
+  Return a JSON object:
+  ```json
+  {{
+    "recommended_recipes": [
+      {{
+        "recipe_name": "name of migration recipe",
+        "target_apis": ["list of APIs this recipe addresses"],
+        "priority": "high|medium|low",
+        "dependencies": ["other recipes that must run first"],
+        "estimated_files_affected": number,
+        "risk_level": "low|medium|high"
+      }}
+    ],
+    "custom_recipes_needed": [
+      {{
+        "description": "what needs custom handling",
+        "affected_apis": ["APIs requiring custom recipe"],
+        "suggested_approach": "recommended migration strategy"
+      }}
+    ],
+    "execution_order": ["ordered list of recipe names"]
+  }}
+  ```
+
+variables:
+  - name: "analysis_results"
+    type: "string" 
+    description: "JSON output from deprecation analysis"
+    required: true
+  - name: "available_recipes"
+    type: "string"
+    description: "List of available migration recipes"
+    required: true

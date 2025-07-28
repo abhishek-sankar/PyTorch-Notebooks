@@ -1,0 +1,82 @@
+name: "Migration Error Fixing"
+description: "Fixes compilation and runtime errors after migration"
+template: |
+  You are a Java debugging expert. Fix the compilation/runtime errors in the migrated code.
+
+  **Error Context:**
+  ```
+  {error_message}
+  ```
+
+  **Source Code with Error:**
+  ```java
+  {source_code}
+  ```
+
+  **File Path:** {file_path}
+
+  **Migration Context:**
+  - Original recipe applied: {applied_recipe}
+  - Migration changes made: {previous_changes}
+
+  **Task:**
+  1. Analyze the error message and identify the root cause
+  2. Fix the error while preserving the migration intent
+  3. Ensure the fix doesn't break other parts of the code
+  4. Validate that the solution maintains the desired migration outcome
+
+  **Guidelines:**
+  - Prefer minimal fixes that address the specific error
+  - Don't undo the migration unless absolutely necessary
+  - Consider type compatibility and API changes
+  - Maintain existing code patterns and style
+
+  **Output format:**
+  Return a JSON object:
+  ```json
+  {{
+    "fixed_code": "corrected source code",
+    "error_analysis": {{
+      "root_cause": "explanation of what caused the error",
+      "error_type": "compilation|runtime|logic",
+      "affected_components": ["list of affected classes/methods"]
+    }},
+    "fix_applied": {{
+      "description": "what was changed to fix the error",
+      "changes": [
+        {{
+          "line_number": number,
+          "old_code": "code before fix",
+          "new_code": "code after fix",
+          "reason": "why this change fixes the error"
+        }}
+      ]
+    }},
+    "additional_imports": ["any new imports needed"],
+    "success": boolean,
+    "remaining_issues": ["list of any unresolved issues"],
+    "testing_notes": "suggestions for testing the fix"
+  }}
+  ```
+
+variables:
+  - name: "error_message"
+    type: "string"
+    description: "Complete error message from compilation/runtime"
+    required: true
+  - name: "source_code"
+    type: "string"
+    description: "Java source code with the error"
+    required: true
+  - name: "file_path"
+    type: "string"
+    description: "Path to the file with error"
+    required: true
+  - name: "applied_recipe"
+    type: "string"
+    description: "Migration recipe that was applied"
+    required: false
+  - name: "previous_changes"
+    type: "string"
+    description: "Changes made during migration"
+    required: false

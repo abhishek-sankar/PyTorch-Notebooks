@@ -1,0 +1,57 @@
+name: "Java Deprecation Analysis"
+description: "Analyzes Java code for deprecated APIs and provides migration recommendations"
+template: |
+  You are an expert Java migration analyst. Analyze the following Java code for deprecated APIs and migration issues.
+
+  **Code to analyze:**
+  ```java
+  {code}
+  ```
+
+  **Project context:**
+  - Java version: {java_version}
+  - Dependencies: {dependencies}
+
+  **Analysis requirements:**
+  1. Identify all deprecated APIs, methods, and classes
+  2. Determine the severity of each deprecation (low/medium/high)
+  3. Provide specific replacement recommendations
+  4. Estimate migration complexity
+  5. Flag potential breaking changes
+
+  **Output format:**
+  Return a JSON object with this structure:
+  ```json
+  {{
+    "deprecated_apis": [
+      {{
+        "api": "specific deprecated API",
+        "location": "file:line",
+        "severity": "low|medium|high",
+        "replacement": "recommended replacement",
+        "reason": "why it's deprecated",
+        "migration_notes": "specific migration steps"
+      }}
+    ],
+    "summary": {{
+      "total_issues": number,
+      "high_severity": number,
+      "estimated_effort": "low|medium|high",
+      "breaking_changes": boolean
+    }}
+  }}
+  ```
+
+variables:
+  - name: "code"
+    type: "string"
+    description: "Java source code to analyze"
+    required: true
+  - name: "java_version" 
+    type: "string"
+    description: "Target Java version"
+    required: true
+  - name: "dependencies"
+    type: "string"
+    description: "Project dependencies and versions"
+    required: false

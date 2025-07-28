@@ -1,7 +1,7 @@
-# Java 11 to 21+ Migration Agent System
+# Intelligent Java Migration System
 
 ## Overview
-An agentic system that automates the migration of Maven-based Java projects from Java 11 to 21+, including Spring Boot upgrades and dependency migrations. The system uses LangChain-based agents with human-in-the-loop capabilities for handling complex migration scenarios.
+An advanced agent-based system for automating Java 8/11/17 to Java 21 migrations with Spring Boot 3.x and Jakarta EE support using LangChain/LangGraph orchestration. The system provides human-like decision making through intelligent agents that can analyze, execute, and fix migration issues automatically.
 
 ## Problem Statement
 - Manual Java version migrations are time-consuming and error-prone
@@ -9,83 +9,91 @@ An agentic system that automates the migration of Maven-based Java projects from
 - Organizations need consistent, repeatable migration processes
 - Complex dependency conflicts require expert knowledge
 
-## System Architecture
+## 🏗️ System Architecture
 
-### Core Components
+### Core Components (Implemented)
 
-#### 1. **Migration Orchestrator** (LangChain Agent)
-- Coordinates the entire migration workflow
-- Manages agent lifecycle and task distribution
-- Handles human escalation decisions
-- Maintains migration state and progress
+#### 1. **Migration Orchestrator** (`orchestrator.py`)
+- **LangGraph StateGraph**: Manages migration workflow as a state machine
+- **Agent Coordination**: Routes decisions between specialized agents
+- **State Persistence**: SQLite-backed checkpointing for recovery
+- **Human Escalation**: Automatic escalation for complex scenarios
+- **Error Recovery**: Retry logic with intelligent backoff
 
-#### 2. **Analysis Agent**
-- Scans Maven project structure (pom.xml analysis)
-- Identifies current Java version and dependencies
-- Detects deprecated components (e.g., Dozer mapper)
-- Generates pre-migration compatibility report
-- Estimates migration complexity and risk level
+#### 2. **Analysis Agent** (`agents/analysis_agent.py`)
+- **Repository Analysis**: Deep project structure and dependency analysis
+- **Maven Central Integration**: Real-time version checking and compatibility
+- **LLM-Powered Insights**: Intelligent complexity assessment and recommendations
+- **Risk Assessment**: Automated migration difficulty scoring
+- **Framework Detection**: Identifies Spring Boot, JUnit, Jakarta usage patterns
 
-#### 3. **Dependency Resolution Agent**
-- Analyzes dependency tree
-- Identifies version conflicts
-- Proposes dependency upgrade paths
-- Prioritizes core dependencies for migration order
+#### 3. **Execution Agent** (`agents/execution_agent.py`)
+- **OpenRewrite Integration**: Automated recipe execution with monitoring
+- **Recipe Orchestration**: LLM determines optimal execution order
+- **Progress Tracking**: Real-time monitoring with timeout management
+- **Compilation Validation**: Automatic validation after each recipe
+- **Adaptive Strategy**: Dynamic adjustment based on execution results
 
-#### 4. **Code Migration Agent**
-- Executes OpenRewrite recipes
-- Handles specific transformations:
-  - javax.* → jakarta.*
-  - JUnit 4 → JUnit 5
-  - Jackson upgrades
-  - Dozer mapper replacement strategies
-- Creates custom OpenRewrite recipes when needed
-- Manages file editing operations
+#### 4. **Error Fixing Agent** (`agents/error_agent.py`)
+- **Error Categorization**: Intelligent classification of compilation errors
+- **Pattern-Based Fixes**: Automated fixes for common migration issues
+- **LLM-Assisted Resolution**: Complex error analysis and fixing
+- **Code Transformation**: Direct file modification with backup support
+- **Iterative Improvement**: Learning from previous fix attempts
 
-#### 5. **Testing & Validation Agent**
-- Runs Maven test suites
-- Compares pre/post migration test results
-- Identifies new failures or deprecation warnings
-- Validates successful compilation
+### 🛠️ Advanced Tooling (Implemented)
 
-#### 6. **Human Interface Agent**
-- Monitors for stuck states (repeated errors)
-- Presents migration choices to humans
-- Records human decisions for learning
-- Manages escalation based on risk levels
+#### **File Operations** (`tools/file_operations.py`)
+- **Safe File Manipulation**: Read/write with backup and rollback capabilities
+- **Pattern-Based Modifications**: Find/replace with regex support
+- **Change Tracking**: Complete operation history and audit trail
+- **Backup Management**: Automatic backup creation and cleanup
 
-### Tool Capabilities Required
-- **Web Browsing**: Search for migration guides, dependency documentation
-- **Command Execution**: Run Maven commands, Git operations, OpenRewrite
-- **File Operations**: Read/write project files, create reports
-- **AST Analysis**: Parse and analyze Java code structure
+#### **Command Executor** (`tools/command_executor.py`)
+- **Monitored Execution**: Command execution with timeout and progress tracking
+- **Maven Integration**: Specialized support for Maven commands (compile, test, package)
+- **Process Management**: Safe process termination and resource cleanup
+- **Output Parsing**: Intelligent parsing of Maven and OpenRewrite output
 
-### Communication Architecture
+#### **Maven Central API** (`tools/maven_api.py`)
+- **Version Discovery**: Real-time latest version checking with caching
+- **Compatibility Analysis**: Java 21 compatibility assessment for dependencies
+- **Dependency Analysis**: Comprehensive dependency update recommendations
+- **Rate Limiting**: Respectful API usage with automatic throttling
 
-#### Option 1: Message Queue (Recommended)
-**Pros:**
-- Decoupled agent communication
-- Better scalability for future multi-project support
-- Reliable message delivery and retry mechanisms
-- Clear audit trail of agent interactions
+#### **OpenRewrite Client** (`tools/openrewrite_client.py`)
+- **Recipe Execution**: Direct OpenRewrite recipe execution and monitoring
+- **Configuration Management**: Dynamic rewrite.yml generation
+- **Compatibility Validation**: Project compatibility checking
+- **Recipe Discovery**: Automatic detection of applicable recipes
 
-**Cons:**
-- Additional infrastructure complexity
-- Potential latency in agent communication
+### 🔄 Agent Communication (LangGraph Implementation)
 
-**Implementation**: RabbitMQ or Redis with LangChain integration
+#### **State-Based Orchestration**
+- **Shared State**: All agents operate on a common `MigrationState` object
+- **Message Passing**: Agents communicate through structured messages using LangChain
+- **Event-Driven Flow**: Conditional edges based on execution results and error states
+- **Persistence**: SQLite-based state checkpointing for recovery and resume
 
-#### Option 2: Direct Memory Sharing
-**Pros:**
-- Simpler implementation
-- Lower latency
-- Easier debugging
+#### **Workflow Coordination**
+```python
+# LangGraph workflow structure
+workflow = StateGraph(MigrationState)
+workflow.add_node("analyze_repository", self._analyze_repository)
+workflow.add_node("execute_recipes", self._execute_recipes)  
+workflow.add_node("fix_errors", self._fix_errors)
+workflow.add_conditional_edges(
+    "execute_recipes",
+    self._should_fix_errors,
+    {"fix_errors": "fix_errors", "validate_tests": "validate_tests"}
+)
+```
 
-**Cons:**
-- Tighter coupling between agents
-- Harder to scale
-
-**Recommendation**: Start with Redis for both message queue and shared memory
+#### **Benefits of LangGraph Approach**
+- **Deterministic Flow**: Predictable execution paths with clear state transitions
+- **Error Recovery**: Automatic retry and rollback capabilities
+- **Human Integration**: Seamless escalation points with context preservation
+- **Debugging**: Complete execution trace and state inspection
 
 ## Technical Specifications
 
@@ -303,7 +311,7 @@ message_history = RedisChatMessageHistory(
 
 memory = ConversationSummaryBufferMemory(
     chat_memory=message_history,
-    max_token_limit=2000,
+    max_token_limit=200000,
     return_messages=True
 )
 ```
@@ -343,23 +351,61 @@ class MigrationState(BaseModel):
    - Try alternative approaches
    - Escalate to human if no alternatives
 
-## Example Usage
+## 🚀 Quick Start
 
+### 1. Setup Environment
 ```bash
-# Basic migration
-migration-agent migrate /path/to/project
+# Install dependencies
+pip install -r requirements.txt
 
-# With specific options
-migration-agent migrate /path/to/project \
-  --target-java=21 \
-  --target-spring-boot=3.2 \
-  --human-review=high-risk-only
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys
 
-# Analyze only
-migration-agent analyze /path/to/project --detailed
+# Set Anthropic API key
+export ANTHROPIC_API_KEY="your_api_key_here"
+```
 
-# Resume interrupted migration
-migration-agent resume /path/to/project --session-id=xxx
+### 2. Basic Migration
+```python
+from orchestrator import MigrationOrchestrator
+
+# Initialize with default configuration
+orchestrator = MigrationOrchestrator()
+
+# Migrate the xsync project
+result = orchestrator.migrate_repository("./xsync")
+
+print(f"Success: {result['success']}")
+print(f"Applied recipes: {len(result['applied_recipes'])}")
+```
+
+### 3. Run Example
+```bash
+# Run the comprehensive example
+python example.py
+
+# This will demonstrate:
+# - Basic migration workflow
+# - Custom configuration
+# - Individual tool usage
+# - Analysis-only mode
+```
+
+### 4. Custom Configuration
+```python
+from orchestrator import MigrationConfig
+
+config = MigrationConfig(
+    target_java_version="21",
+    target_spring_boot_version="3.2",
+    enable_jakarta_migration=True,
+    dry_run=False,  # Set to True for testing
+    backup_enabled=True
+)
+
+orchestrator = MigrationOrchestrator(config=config)
+result = orchestrator.migrate_repository("/path/to/project")
 ```
 
 ## Success Metrics

@@ -1,0 +1,67 @@
+name: "Code Migration Application"
+description: "Applies specific migration recipes to Java source code"
+template: |
+  You are a Java code migration specialist. Apply the specified migration recipe to the provided code.
+
+  **Migration Recipe:**
+  ```json
+  {recipe}
+  ```
+
+  **Source Code:**
+  ```java
+  {source_code}
+  ```
+
+  **File Path:** {file_path}
+
+  **Instructions:**
+  1. Apply the migration recipe exactly as specified
+  2. Preserve all existing functionality
+  3. Maintain code style and formatting
+  4. Add migration comments where helpful
+  5. Ensure the code compiles after changes
+
+  **Important:**
+  - Only modify code related to the specific recipe
+  - Do not make unrelated improvements or changes
+  - Preserve import statements unless they need updating
+  - Maintain existing error handling patterns
+
+  **Output format:**
+  Return a JSON object:
+  ```json
+  {{
+    "migrated_code": "complete migrated source code",
+    "changes_made": [
+      {{
+        "line_number": number,
+        "old_code": "original code",
+        "new_code": "migrated code", 
+        "change_type": "replacement|addition|removal",
+        "description": "what was changed and why"
+      }}
+    ],
+    "imports_modified": {{
+      "added": ["new imports"],
+      "removed": ["removed imports"]
+    }},
+    "compilation_notes": "any notes about compilation requirements",
+    "success": boolean,
+    "error_message": "error description if success is false"
+  }}
+  ```
+
+variables:
+  - name: "recipe"
+    type: "string"
+    description: "Migration recipe JSON to apply"
+    required: true
+  - name: "source_code"
+    type: "string"
+    description: "Java source code to migrate"
+    required: true
+  - name: "file_path"
+    type: "string"
+    description: "Path to the source file"
+    required: true

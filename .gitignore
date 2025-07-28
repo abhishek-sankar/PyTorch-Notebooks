@@ -5,3 +5,4 @@ venv/
 *.pth
 diffusion/abstract_art/
 */__pycache__/
+migration/xsync
