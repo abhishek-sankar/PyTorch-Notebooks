@@ -71,7 +71,7 @@ SYSTEMATIC PROCESS:
 8. PROVIDE FINAL ANSWER
 
 You MUST end with a FINAL ANSWER that includes specific OpenRewrite recipes to run.
-Example: "FINAL ANSWER: Recommended OpenRewrite migration sequence: 1. Apply recipe org.openrewrite.java.migrate.Java8toJava11..."
+Example: "FINAL ANSWER: Recommended OpenRewrite migration sequence: 1. Apply recipe org.openrewrite.java.migrate.UpgradeToJava21..."
 
 Take as many tool calls as needed for thorough analysis."""
 

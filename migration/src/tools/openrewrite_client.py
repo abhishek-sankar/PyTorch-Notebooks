@@ -80,9 +80,9 @@ def remove_rewrite_config(project_path: str) -> str:
 def suggest_recipes_for_java_version(current_version: str, target_version: str = "21") -> str:
     """Suggest OpenRewrite recipes based on current and target Java versions."""
     version_mapping = {
-        "8": ["org.openrewrite.java.migrate.Java8toJava11"],
-        "11": ["org.openrewrite.java.migrate.Java11to17"],
-        "17": ["org.openrewrite.java.migrate.Java17to21"]
+        "8": ["org.openrewrite.java.migrate.UpgradeToJava21"],
+        "11": ["org.openrewrite.java.migrate.UpgradeToJava21"],
+        "17": ["org.openrewrite.java.migrate.UpgradeToJava21"]
     }
     
     try:
@@ -91,17 +91,14 @@ def suggest_recipes_for_java_version(current_version: str, target_version: str =
         
         if current == "8" and target_version == "21":
             recipes.extend([
-                "org.openrewrite.java.migrate.Java8toJava11",
-                "org.openrewrite.java.migrate.Java11to17", 
-                "org.openrewrite.java.migrate.Java17to21"
+                "org.openrewrite.java.migrate.UpgradeToJava21",
             ])
         elif current == "11" and target_version == "21":
             recipes.extend([
-                "org.openrewrite.java.migrate.Java11to17",
-                "org.openrewrite.java.migrate.Java17to21"
+                "org.openrewrite.java.migrate.UpgradeToJava21",
             ])
         elif current == "17" and target_version == "21":
-            recipes.append("org.openrewrite.java.migrate.Java17to21")
+            recipes.append("org.openrewrite.java.migrate.UpgradeToJava21")
         else:
             return f"No specific recipes for Java {current} to {target_version} migration"
         
