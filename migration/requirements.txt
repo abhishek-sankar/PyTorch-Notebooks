@@ -35,7 +35,7 @@ jupyter-core==5.8.1
 langchain==0.3.26
 langchain-community==0.3.27
 langchain-core==0.3.72
-langchain-openai==0.3.28
+langchain-google-genai==2.1.8
 langchain-text-splitters==0.3.8
 langgraph==0.5.4
 langgraph-checkpoint==2.1.1
@@ -90,3 +90,12 @@ wcwidth==0.2.13
 xxhash==3.5.0
 yarl==1.20.1
 zstandard==0.23.0
+
+# Additional dependencies for Java migration system
+structlog>=23.0.0
+lxml>=4.9.0
+jsonschema>=4.17.0
+click>=8.1.0
+pathlib2>=2.3.7
+jupyter>=1.0.0
+notebook>=6.5.4
