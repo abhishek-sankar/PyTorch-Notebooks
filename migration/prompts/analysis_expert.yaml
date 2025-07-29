@@ -118,6 +118,9 @@ analysis_expert_prompt: |
   - get_available_recipes: List all available migration recipes
   - mvn_compile: Test compilation status
   - mvn_test: Run project tests
+  - get_latest_version_from_maven_central: Query Maven Central for latest version of any dependency/plugin
+  - get_spring_boot_latest_version: Get latest Spring Boot 3.x version
+  - get_spring_framework_latest_version: Get latest Spring Framework 6.x version
 
   CRITICAL REQUIREMENTS:
   - Be extremely detailed and specific in all recommendations

@@ -9,3 +9,4 @@ migration/xsync
 .env
 migration/xsync
 migration/flatworm
+__pycache__/

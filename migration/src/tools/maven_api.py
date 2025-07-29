@@ -6,6 +6,8 @@ from pathlib import Path
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing import List
+import requests
+import json
 
 @tool
 def read_pom(project_path: str) -> str:
@@ -263,10 +265,121 @@ def add_rewrite_dependency(project_path: str, dependency_artifact: str, version:
     except Exception as e:
         return f"Error adding OpenRewrite dependency: {str(e)}"
 
+@tool
+def get_latest_version_from_maven_central(group_id: str, artifact_id: str) -> str:
+    """Query Maven Central to find the latest version of a dependency or plugin."""
+    try:
+        # Maven Central search API endpoint
+        url = f"https://search.maven.org/solrsearch/select"
+        params = {
+            "q": f"g:{group_id} AND a:{artifact_id}",
+            "core": "gav",
+            "rows": 1,
+            "wt": "json"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if data.get("response", {}).get("numFound", 0) == 0:
+            return f"No artifact found for {group_id}:{artifact_id}"
+        
+        docs = data.get("response", {}).get("docs", [])
+        if not docs:
+            return f"No version information found for {group_id}:{artifact_id}"
+        
+        latest_version = docs[0].get("v", "unknown")
+        timestamp = docs[0].get("timestamp", 0)
+        
+        # Convert timestamp to readable date
+        import datetime
+        date_str = datetime.datetime.fromtimestamp(timestamp / 1000).strftime("%Y-%m-%d") if timestamp else "unknown"
+        
+        return f"Latest version of {group_id}:{artifact_id} is {latest_version} (published: {date_str})"
+        
+    except requests.RequestException as e:
+        return f"Error querying Maven Central: {str(e)}"
+    except Exception as e:
+        return f"Error processing Maven Central response: {str(e)}"
+
+@tool  
+def get_spring_boot_latest_version() -> str:
+    """Get the latest Spring Boot 3.x version from Maven Central."""
+    try:
+        # Query for Spring Boot starter parent
+        url = "https://search.maven.org/solrsearch/select"
+        params = {
+            "q": "g:org.springframework.boot AND a:spring-boot-starter-parent AND v:3.*",
+            "core": "gav", 
+            "rows": 10,
+            "wt": "json"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        docs = data.get("response", {}).get("docs", [])
+        
+        if not docs:
+            return "No Spring Boot 3.x versions found"
+        
+        # Get the latest version (first in results)
+        latest = docs[0]
+        version = latest.get("v", "unknown")
+        timestamp = latest.get("timestamp", 0)
+        
+        import datetime
+        date_str = datetime.datetime.fromtimestamp(timestamp / 1000).strftime("%Y-%m-%d") if timestamp else "unknown"
+        
+        return f"Latest Spring Boot 3.x version: {version} (published: {date_str})"
+        
+    except Exception as e:
+        return f"Error getting Spring Boot version: {str(e)}"
+
+@tool
+def get_spring_framework_latest_version() -> str:
+    """Get the latest Spring Framework 6.x version from Maven Central."""
+    try:
+        url = "https://search.maven.org/solrsearch/select"
+        params = {
+            "q": "g:org.springframework AND a:spring-core AND v:6.*",
+            "core": "gav",
+            "rows": 10, 
+            "wt": "json"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        docs = data.get("response", {}).get("docs", [])
+        
+        if not docs:
+            return "No Spring Framework 6.x versions found"
+        
+        latest = docs[0]
+        version = latest.get("v", "unknown")
+        timestamp = latest.get("timestamp", 0)
+        
+        import datetime
+        date_str = datetime.datetime.fromtimestamp(timestamp / 1000).strftime("%Y-%m-%d") if timestamp else "unknown"
+        
+        return f"Latest Spring Framework 6.x version: {version} (published: {date_str})"
+        
+    except Exception as e:
+        return f"Error getting Spring Framework version: {str(e)}"
+
 def _get_text(element, tag: str, default: str = "") -> str:
     """Get text from XML element safely."""
     child = element.find(tag)
     return child.text if child is not None and child.text else default
 
 # Collect all Maven tools
-maven_tools = [read_pom, get_java_version, update_java_version, list_dependencies, add_openrewrite_plugin, configure_openrewrite_recipes, add_rewrite_dependency]
+maven_tools = [
+    read_pom, get_java_version, update_java_version, list_dependencies, 
+    add_openrewrite_plugin, configure_openrewrite_recipes, add_rewrite_dependency,
+    get_latest_version_from_maven_central, get_spring_boot_latest_version, get_spring_framework_latest_version
+]
