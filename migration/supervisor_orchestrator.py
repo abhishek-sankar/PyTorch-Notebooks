@@ -14,6 +14,13 @@ from src.agents.analysis_agent import AnalysisAgent
 from src.agents.execution_agent import ExecutionAgent
 from src.agents.error_agent import ErrorAgent
 from src.tools.command_executor import mvn_compile, mvn_test, run_command
+from prompts.prompt_loader import (
+    get_supervisor_prompt,
+    get_migration_request,
+    get_analysis_expert_prompt,
+    get_execution_expert_prompt,
+    get_error_expert_prompt
+)
 
 
 class SupervisorMigrationOrchestrator:
@@ -46,25 +53,7 @@ class SupervisorMigrationOrchestrator:
                 temperature=0
             ),
             tools=self._get_analysis_tools(),
-            prompt="""You are a Java Migration Analysis Expert.
-
-ROLE: Analyze Java projects and recommend OpenRewrite recipes for migration to Java 21.
-
-RESPONSIBILITIES:
-- Examine pom.xml for current Java version and dependencies
-- Search source code for migration patterns (javax imports, JUnit versions, etc.)
-- Discover available OpenRewrite recipes using Maven
-- Recommend specific recipes in order of execution
-- Assess migration complexity and risks
-
-INSTRUCTIONS:
-- Always start by reading pom.xml to understand current state
-- Use mvn_rewrite_discover to find actually available recipes
-- Provide specific recipe names that exist and work
-- Focus on practical, executable recommendations
-- End with a clear list of recommended recipes
-
-Respond ONLY with your analysis results and recipe recommendations.""",
+            prompt=get_analysis_expert_prompt(),
             name="analysis_expert"
         )
         
@@ -75,27 +64,7 @@ Respond ONLY with your analysis results and recipe recommendations.""",
                 temperature=0
             ),
             tools=self._get_execution_tools() + validation_tools,
-            prompt="""You are a Java Migration Execution Expert.
-
-ROLE: Execute OpenRewrite recipes and configure Maven projects for Java 21 migration.
-
-RESPONSIBILITIES:
-- Configure OpenRewrite plugin in pom.xml
-- Execute specific OpenRewrite recipes
-- Update Java versions in pom.xml
-- Validate changes by compiling project
-- Handle Maven and OpenRewrite configuration issues
-
-INSTRUCTIONS:
-- Configure OpenRewrite in pom.xml (NOT YAML files)
-- Add required dependencies for recipes
-- Execute recipes using mvn rewrite:run
-- Validate with mvn compile after changes
-- Report success/failure clearly
-
-CRITICAL: OpenRewrite MUST be configured in pom.xml. YAML configurations don't work.
-
-Respond ONLY with execution results and status.""",
+            prompt=get_execution_expert_prompt(),
             name="execution_expert"
         )
         
@@ -106,27 +75,7 @@ Respond ONLY with execution results and status.""",
                 temperature=0
             ),
             tools=self._get_error_tools() + validation_tools,
-            prompt="""You are a Java Migration Error Fixing Expert.
-
-ROLE: Fix compilation errors, build failures, and migration issues.
-
-RESPONSIBILITIES:
-- Analyze compilation and build errors
-- Fix Java code issues after migration
-- Resolve dependency conflicts
-- Fix test failures
-- Update deprecated API usage
-
-INSTRUCTIONS:
-- Read and understand the specific error messages
-- Locate problematic files and fix issues
-- Test fixes by compiling and running tests
-- Make minimal, targeted changes
-- Verify fixes work before concluding
-
-Focus on practical solutions that resolve the specific errors presented.
-
-Respond ONLY with your fix results and validation status.""",
+            prompt=get_error_expert_prompt(),
             name="error_expert"
         )
         
@@ -177,34 +126,7 @@ Respond ONLY with your fix results and validation status.""",
         workflow = create_supervisor(
             agents=self.migration_workers,
             model=supervisor_model,
-            prompt="""You are a Java Migration Supervisor managing a team of specialized agents.
-
-YOUR MISSION: Migrate Java projects from older versions to Java 21 using OpenRewrite.
-
-TEAM MEMBERS:
-- analysis_expert: Analyzes projects and recommends OpenRewrite recipes
-- execution_expert: Executes OpenRewrite recipes and configures Maven
-- error_expert: Fixes compilation errors and build issues
-
-MIGRATION STRATEGY:
-1. START with analysis_expert to understand current project state
-2. Based on analysis, use execution_expert to apply recommended recipes
-3. If errors occur, use error_expert to fix them
-4. Validate progress and repeat until complete
-
-SUCCESS CRITERIA:
-- Java version upgraded to 21 in pom.xml
-- Project compiles successfully (mvn compile passes)
-- All tests pass (mvn test passes)
-
-DECISION MAKING:
-- Always analyze first if you don't know project state
-- Execute recipes based on analysis recommendations
-- Fix errors immediately when they occur
-- Validate frequently to track progress
-- Don't proceed if current step failed
-
-Be systematic and intelligent about which agent to call next based on the current situation."""
+            prompt=get_supervisor_prompt()
         )
         
         return workflow
@@ -218,21 +140,8 @@ Be systematic and intelligent about which agent to call next based on the curren
         if not os.path.exists(project_path):
             return {"success": False, "error": f"Project path does not exist: {project_path}"}
         
-        # Create migration request
-        migration_request = f"""Please migrate this Java project to Java 21: {project_path}
-
-INSTRUCTIONS:
-1. First analyze the project to understand its current state
-2. Execute appropriate OpenRewrite recipes based on analysis
-3. Fix any errors that occur during migration
-4. Validate that the final result meets success criteria
-
-SUCCESS CRITERIA:
-- Java version is 21 in pom.xml
-- Project compiles successfully (mvn compile)
-- All tests pass (mvn test)
-
-Start by analyzing the project."""
+        # Create migration request using external template
+        migration_request = get_migration_request(project_path)
         
         try:
             start_time = datetime.now()
@@ -389,7 +298,7 @@ Start by analyzing the project."""
 
 
 if __name__ == "__main__":
-    project_path = "/Users/abhisheksankar/Desktop/PyTorch-Notebooks/migration/flatworm"
+    project_path = "./flatworm"
     
     orchestrator = SupervisorMigrationOrchestrator()
     result = orchestrator.migrate_project(project_path)
