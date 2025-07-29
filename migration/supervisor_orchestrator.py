@@ -300,37 +300,9 @@ Start by analyzing the project."""
                 messages = node_data["messages"]
                 print(f"  Messages: {len(messages)}")
                 
-                for i, msg in enumerate(messages[-2:]):  # Show last 2 messages
-                    msg_content = ""
-                    if isinstance(msg, dict):
-                        msg_content = msg.get("content", str(msg))
-                        msg_type = msg.get("type", "unknown")
-                        msg_name = msg.get("name", "")
-                    else:
-                        msg_content = getattr(msg, "content", str(msg))
-                        msg_type = getattr(msg, "type", "unknown")
-                        msg_name = getattr(msg, "name", "")
-                    
-                    # Show message type and source
-                    if msg_name:
-                        print(f"    [{msg_type}] from {msg_name}:")
-                    else:
-                        print(f"    [{msg_type}]:")
-                    
-                    # Show content preview
-                    if msg_content:
-                        content_preview = str(msg_content)[:200] + ("..." if len(str(msg_content)) > 200 else "")
-                        print(f"      {content_preview}")
-                    
-                    # Show tool calls if present
-                    if isinstance(msg, dict) and "tool_calls" in msg:
-                        for tool_call in msg["tool_calls"]:
-                            tool_name = tool_call.get("name", "unknown")
-                            print(f"      TOOL CALL: {tool_name}")
-                    elif hasattr(msg, "tool_calls") and msg.tool_calls:
-                        for tool_call in msg.tool_calls:
-                            tool_name = getattr(tool_call, "name", "unknown")
-                            print(f"      TOOL CALL: {tool_name}")
+                # Show all messages to capture LLM responses
+                for msg in messages:
+                    self._display_detailed_message(msg)
             
             # Show other data if not messages
             elif node_data and str(node_data) != "{}":
@@ -338,6 +310,82 @@ Start by analyzing the project."""
                 print(f"  Data: {data_preview}")
         
         print("-" * 60)
+    
+    def _display_detailed_message(self, msg):
+        """Display detailed information about a message including full LLM responses"""
+        
+        # Debug: print raw message structure
+        print(f"    DEBUG: Message type: {type(msg)}")
+        if isinstance(msg, dict):
+            print(f"    DEBUG: Dict keys: {list(msg.keys())}")
+        else:
+            print(f"    DEBUG: Object attrs: {[attr for attr in dir(msg) if not attr.startswith('_')]}")
+        
+        # Extract message details
+        if isinstance(msg, dict):
+            msg_content = msg.get("content", "")
+            msg_type = msg.get("type", "unknown")
+            msg_name = msg.get("name", "")
+            tool_calls = msg.get("tool_calls", [])
+        else:
+            msg_content = getattr(msg, "content", "")
+            msg_type = getattr(msg, "type", "unknown") 
+            msg_name = getattr(msg, "name", "")
+            tool_calls = getattr(msg, "tool_calls", [])
+        
+        # Show message header
+        if msg_name:
+            print(f"    [{msg_type.upper()}] from {msg_name}:")
+        else:
+            print(f"    [{msg_type.upper()}]:")
+        
+        # Show full LLM response content - check for AI messages more broadly
+        if msg_content and (msg_type in ["ai", "assistant"] or "ai" in str(msg_type).lower()):
+            print("    " + "="*50)
+            print(f"    LLM RESPONSE:")
+            print("    " + "="*50)
+            # Show full content for LLM responses
+            content_lines = str(msg_content).split('\n')
+            for line in content_lines:
+                print(f"    {line}")
+            print("    " + "="*50)
+        elif msg_content and msg_type not in ["tool", "function"]:
+            # Show full content for non-tool messages to catch LLM responses
+            print("    " + "-"*30)
+            print(f"    CONTENT ({msg_type}):")
+            print("    " + "-"*30)
+            content_lines = str(msg_content).split('\n')
+            for line in content_lines[:20]:  # Show first 20 lines
+                print(f"    {line}")
+            if len(content_lines) > 20:
+                print(f"    ... ({len(content_lines) - 20} more lines)")
+            print("    " + "-"*30)
+        elif msg_content:
+            # Abbreviated for tool messages
+            if len(str(msg_content)) > 200:
+                print(f"    Content: {str(msg_content)[:200]}...")
+            else:
+                print(f"    Content: {str(msg_content)}")
+        
+        # Show detailed tool calls
+        if tool_calls:
+            print(f"    TOOL CALLS ({len(tool_calls)}):")
+            for i, tool_call in enumerate(tool_calls, 1):
+                if isinstance(tool_call, dict):
+                    tool_name = tool_call.get("name", "unknown")
+                    tool_args = tool_call.get("args", {})
+                    tool_id = tool_call.get("id", "")
+                else:
+                    tool_name = getattr(tool_call, "name", "unknown")
+                    tool_args = getattr(tool_call, "args", {})
+                    tool_id = getattr(tool_call, "id", "")
+                
+                print(f"      [{i}] {tool_name}")
+                if tool_id:
+                    print(f"          ID: {tool_id}")
+                if tool_args:
+                    print(f"          Args: {tool_args}")
+                print()
 
 
 if __name__ == "__main__":

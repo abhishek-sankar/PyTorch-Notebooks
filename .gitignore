@@ -7,3 +7,5 @@ diffusion/abstract_art/
 */__pycache__/
 migration/xsync
 .env
+migration/xsync
+migration/flatworm
