@@ -1,0 +1,12 @@
+{
+  "name": "langgraph-supervisor-demo",
+  "version": "1.0.0",
+  "description": "LangGraph supervisor demo with weather and calculator agents",
+  "scripts": {
+    "install-deps": "pip install -r requirements.txt",
+    "server": "python server.py",
+    "test-local": "python supervisor_app.py",
+    "setup-ui": "chmod +x setup_chat_ui.sh && ./setup_chat_ui.sh"
+  },
+  "keywords": ["langgraph", "supervisor", "agents", "chat"]
+}

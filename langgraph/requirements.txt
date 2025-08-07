@@ -1,0 +1,7 @@
+langgraph-supervisor
+langgraph
+langchain-openai
+python-dotenv
+fastapi
+uvicorn
+requests
