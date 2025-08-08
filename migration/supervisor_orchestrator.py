@@ -10,9 +10,6 @@ from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 
-from src.agents.analysis_agent import AnalysisAgent
-from src.agents.execution_agent import ExecutionAgent
-from src.agents.error_agent import ErrorAgent
 from src.tools.command_executor import mvn_compile, mvn_test, run_command
 from prompts.prompt_loader import (
     get_supervisor_prompt,

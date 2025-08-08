@@ -1,4 +1,5 @@
 import os
+import sys
 from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,8 +11,9 @@ import uuid
 import json
 import asyncio
 
-from supervisor_app import create_supervisor_system
-from langchain_core.messages import HumanMessage, AIMessage
+# Add migration directory to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'migration'))
+from supervisor_orchestrator import SupervisorMigrationOrchestrator
 
 load_dotenv()
 
@@ -30,8 +32,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize supervisor
-supervisor = create_supervisor_system()
+# Initialize migration supervisor
+supervisor = SupervisorMigrationOrchestrator()
 
 class ChatMessage(BaseModel):
     content: str
@@ -55,28 +57,29 @@ async def health_check():
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
-    """Main chat endpoint for the supervisor"""
+    """Main chat endpoint for the migration supervisor"""
     try:
-        # Convert messages to LangChain format
-        messages = []
-        for msg in request.messages:
-            if msg.type == "human":
-                messages.append(HumanMessage(content=msg.content))
-            else:
-                messages.append(AIMessage(content=msg.content))
+        # Get the latest message content (assuming it's a project path)
+        if not request.messages:
+            raise HTTPException(status_code=400, detail="No messages provided")
         
-        # Get response from supervisor
-        response = supervisor.invoke({"messages": messages})
+        latest_message = request.messages[-1]
+        project_path = latest_message.content.strip()
         
-        # Extract response content
-        if isinstance(response, dict) and "messages" in response:
-            last_message = response["messages"][-1]
-            if hasattr(last_message, 'content'):
-                content = last_message.content
-            else:
-                content = str(last_message)
+        # Check if it's a valid project path
+        if not os.path.exists(project_path):
+            return ChatResponse(
+                content=f"Error: Project path '{project_path}' does not exist. Please provide a valid project path for migration.",
+                type="ai"
+            )
+        
+        # Use migrate_project method
+        result = supervisor.migrate_project(project_path)
+        
+        if result.get('success'):
+            content = f"Migration completed successfully!\n\n{result.get('result', '')}\n\nDuration: {result.get('duration', 0):.2f} seconds"
         else:
-            content = str(response)
+            content = f"Migration failed: {result.get('error', 'Unknown error')}"
         
         return ChatResponse(content=content, type="ai")
         
@@ -139,32 +142,40 @@ async def get_thread_history(thread_id: str, request: Dict[str, Any]):
 
 @app.post("/threads/{thread_id}/runs")
 async def create_run(thread_id: str, request: Dict[str, Any]):
-    """LangGraph-compatible runs endpoint"""
+    """LangGraph-compatible runs endpoint for migration"""
     try:
         # Extract input from request
         input_data = request.get("input", {})
         messages = input_data.get("messages", [])
         
-        # Convert messages to LangChain format
-        langchain_messages = []
-        for msg in messages:
-            if isinstance(msg, dict):
-                if msg.get("type") == "human":
-                    langchain_messages.append(HumanMessage(content=msg.get("content", "")))
-                elif msg.get("type") == "ai": 
-                    langchain_messages.append(AIMessage(content=msg.get("content", "")))
-            else:
-                langchain_messages.append(msg)
+        # Get the latest message content (should be a project path)
+        if not messages:
+            raise HTTPException(status_code=400, detail="No messages provided")
         
-        # Invoke supervisor
-        response = supervisor.invoke({"messages": langchain_messages})
+        latest_message = messages[-1]
+        if isinstance(latest_message, dict):
+            project_path = latest_message.get("content", "").strip()
+        else:
+            project_path = str(latest_message).strip()
+        
+        # Check if it's a valid project path
+        if not os.path.exists(project_path):
+            return {
+                "run_id": f"run_{thread_id}",
+                "thread_id": thread_id,
+                "status": "error",
+                "output": {"error": f"Project path '{project_path}' does not exist"}
+            }
+        
+        # Use migrate_project method
+        result = supervisor.migrate_project(project_path)
         
         # Format response for LangGraph chat UI
         return {
             "run_id": f"run_{thread_id}",
             "thread_id": thread_id,
-            "status": "success",
-            "output": response
+            "status": "success" if result.get('success') else "error",
+            "output": result
         }
         
     except Exception as e:
@@ -175,8 +186,8 @@ async def get_assistant(assistant_id: str):
     """Get assistant details"""
     return {
         "assistant_id": assistant_id,
-        "name": "LangGraph Supervisor",
-        "description": "Multi-agent supervisor with weather and calculator agents",
+        "name": "Migration Supervisor",
+        "description": "Multi-agent supervisor for Java project migration with analysis, execution, and error-fixing agents",
         "config": {},
         "graph_id": assistant_id
     }
@@ -187,8 +198,8 @@ async def get_assistants():
     return [
         {
             "assistant_id": "supervisor",
-            "name": "LangGraph Supervisor",
-            "description": "Multi-agent supervisor with weather and calculator agents"
+            "name": "Migration Supervisor", 
+            "description": "Multi-agent supervisor for Java project migration with analysis, execution, and error-fixing agents"
         }
     ]
 
@@ -197,7 +208,7 @@ async def get_info():
     """Return server info"""
     return {
         "version": "1.0.0",
-        "name": "LangGraph Supervisor Server"
+        "name": "Migration Supervisor Server"
     }
 
 @app.post("/threads/search")
@@ -232,7 +243,7 @@ async def search_threads(request: Dict[str, Any]):
 
 @app.post("/threads/{thread_id}/runs/stream")
 async def stream_run(thread_id: str, request: Dict[str, Any]):
-    """Streaming endpoint for real-time responses using SSE format"""
+    """Streaming endpoint for migration with real-time responses"""
     
     async def generate_stream():
         try:
@@ -257,69 +268,79 @@ async def stream_run(thread_id: str, request: Dict[str, Any]):
             yield f"event: metadata\n"
             yield f"data: {json.dumps({'run_id': run_id, 'thread_id': thread_id})}\n\n"
             
-            # Convert new messages from UI format to LangChain format
-            # The supervisor with MemorySaver will handle conversation history automatically
-            langchain_messages = []
-            for msg in messages:
-                if isinstance(msg, dict):
-                    if msg.get("type") == "human":
-                        langchain_messages.append(HumanMessage(content=msg.get("content", "")))
-                    elif msg.get("type") == "ai":
-                        langchain_messages.append(AIMessage(content=msg.get("content", "")))
-                else:
-                    langchain_messages.append(msg)
+            # Get the latest message content (should be a project path)
+            if not messages:
+                yield f"event: error\n"
+                yield f"data: {json.dumps({'error': 'no_messages', 'message': 'No messages provided'})}\n\n"
+                return
             
-            # Invoke supervisor with proper thread configuration for memory persistence
-            # The supervisor's MemorySaver will maintain conversation history per thread
-            config = {"configurable": {"thread_id": thread_id}}
-            response = supervisor.invoke({"messages": langchain_messages}, config=config)
+            latest_message = messages[-1]
+            if isinstance(latest_message, dict):
+                project_path = latest_message.get("content", "").strip()
+            else:
+                project_path = str(latest_message).strip()
             
-            # Format the response properly
-            if isinstance(response, dict) and "messages" in response:
-                # Convert LangChain messages to proper format
-                formatted_messages = []
-                for i, msg in enumerate(response["messages"]):
-                    formatted_msg = {
-                        "id": getattr(msg, 'id', f"msg_{i}"),
-                        "type": getattr(msg, 'type', 'ai'),
-                        "content": getattr(msg, 'content', str(msg))
+            # Check if it's a valid project path
+            if not os.path.exists(project_path):
+                yield f"event: error\n"
+                yield f"data: {json.dumps({'error': 'invalid_path', 'message': f'Project path does not exist: {project_path}'})}\n\n"
+                return
+            
+            # Use migrate_project method
+            result = supervisor.migrate_project(project_path)
+            
+            # Format the response 
+            if result.get('success'):
+                formatted_messages = [
+                    {
+                        "id": "human_input",
+                        "type": "human",
+                        "content": project_path
+                    },
+                    {
+                        "id": "migration_result",
+                        "type": "ai",
+                        "content": f"Migration completed successfully!\n\n{result.get('result', '')}\n\nDuration: {result.get('duration', 0):.2f} seconds"
                     }
-                    
-                    # Add additional fields if they exist
-                    if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                        formatted_msg["tool_calls"] = msg.tool_calls
-                    if hasattr(msg, 'tool_call_id'):
-                        formatted_msg["tool_call_id"] = msg.tool_call_id
-                    if hasattr(msg, 'name'):
-                        formatted_msg["name"] = msg.name
-                    
-                    formatted_messages.append(formatted_msg)
-                
-                # Store the complete conversation history (all messages from the response)
-                # This preserves the full conversation context including agent interactions
-                messages_db[thread_id] = formatted_messages
-                threads_db[thread_id]["updated_at"] = datetime.now().isoformat()
-                
-                # Create proper checkpoint structure
-                values_data = {
-                    "messages": formatted_messages,
-                    "checkpoint": {
-                        "thread_id": thread_id,
-                        "checkpoint_id": checkpoint_id,
-                        "checkpoint_ns": "",
-                        "checkpoint_map": {}
+                ]
+            else:
+                formatted_messages = [
+                    {
+                        "id": "human_input", 
+                        "type": "human",
+                        "content": project_path
                     },
-                    "metadata": {
-                        "step": 1,
-                        "source": "loop"
-                    },
-                    "next": [],
-                    "tasks": []
-                }
-                
-                # Yield values event
-                yield f"event: values\n"
-                yield f"data: {json.dumps(values_data)}\n\n"
+                    {
+                        "id": "migration_error",
+                        "type": "ai", 
+                        "content": f"Migration failed: {result.get('error', 'Unknown error')}"
+                    }
+                ]
+            
+            # Store the conversation
+            messages_db[thread_id] = formatted_messages
+            threads_db[thread_id]["updated_at"] = datetime.now().isoformat()
+            
+            # Create proper checkpoint structure
+            values_data = {
+                "messages": formatted_messages,
+                "checkpoint": {
+                    "thread_id": thread_id,
+                    "checkpoint_id": checkpoint_id,
+                    "checkpoint_ns": "",
+                    "checkpoint_map": {}
+                },
+                "metadata": {
+                    "step": 1,
+                    "source": "loop"
+                },
+                "next": [],
+                "tasks": []
+            }
+            
+            # Yield values event
+            yield f"event: values\n"
+            yield f"data: {json.dumps(values_data)}\n\n"
             
             # End the stream
             yield f"event: end\n"
@@ -343,6 +364,6 @@ async def stream_run(thread_id: str, request: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting LangGraph Supervisor Server on port 2024...")
-    print("Available agents: weather_agent, calculator_agent")
+    print("Starting Migration Supervisor Server on port 2024...")
+    print("Available workers: analysis_expert, execution_expert, error_expert")
     uvicorn.run(app, host="0.0.0.0", port=2024)
