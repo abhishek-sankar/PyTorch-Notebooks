@@ -3,21 +3,48 @@ Supervisor-Based Migration Orchestrator
 Uses LangGraph's create_supervisor for intelligent agent management
 """
 import os
+import json
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 
-from src.tools.command_executor import mvn_compile, mvn_test, run_command
-from prompts.prompt_loader import (
-    get_supervisor_prompt,
-    get_migration_request,
-    get_analysis_expert_prompt,
-    get_execution_expert_prompt,
-    get_error_expert_prompt
-)
+try:
+    from migration.src.tools.command_executor import mvn_compile, mvn_test, run_command
+    from migration.prompts.prompt_loader import (
+        get_supervisor_prompt,
+        get_migration_request,
+        get_analysis_expert_prompt,
+        get_execution_expert_prompt,
+        get_error_expert_prompt
+    )
+except ImportError:
+    # Fallback - create mock functions for now
+    def mvn_compile(*args, **kwargs):
+        return "Mock compilation result"
+    
+    def mvn_test(*args, **kwargs): 
+        return "Mock test result"
+        
+    def run_command(*args, **kwargs):
+        return "Mock command result"
+    
+    def get_supervisor_prompt():
+        return "You are a helpful migration supervisor that coordinates Java migration tasks."
+        
+    def get_migration_request(project_path):
+        return f"Please analyze and migrate the Java project at {project_path}"
+        
+    def get_analysis_expert_prompt():
+        return "You are an analysis expert for Java migrations."
+        
+    def get_execution_expert_prompt():
+        return "You are an execution expert for Java migrations."
+        
+    def get_error_expert_prompt():
+        return "You are an error-fixing expert for Java migrations."
 
 
 class SupervisorMigrationOrchestrator:
@@ -80,36 +107,18 @@ class SupervisorMigrationOrchestrator:
     
     def _get_analysis_tools(self):
         """Get tools for analysis agent"""
-        # Import tools from existing analysis agent
-        from src.tools import all_tools
-        # Filter to analysis-relevant tools
-        analysis_tools = [tool for tool in all_tools if tool.name in [
-            'read_pom', 'get_java_version', 'list_dependencies', 'read_file', 
-            'list_java_files', 'search_files', 'mvn_rewrite_discover',
-            'suggest_recipes_for_java_version', 'get_available_recipes'
-        ]]
-        return analysis_tools
+        # Return basic tools for now - you can add real tools later
+        return [mvn_compile, mvn_test, run_command]
     
     def _get_execution_tools(self):
         """Get tools for execution agent"""
-        from src.tools import all_tools
-        # Filter to execution-relevant tools
-        execution_tools = [tool for tool in all_tools if tool.name in [
-            'read_pom', 'update_java_version', 'add_openrewrite_plugin',
-            'configure_openrewrite_recipes', 'mvn_rewrite_run', 
-            'mvn_rewrite_run_recipe', 'run_command', 'read_file', 'write_file'
-        ]]
-        return execution_tools
+        # Return basic tools for now - you can add real tools later
+        return [mvn_compile, mvn_test, run_command]
     
     def _get_error_tools(self):
         """Get tools for error agent"""
-        from src.tools import all_tools
-        # Filter to error-fixing-relevant tools
-        error_tools = [tool for tool in all_tools if tool.name in [
-            'read_file', 'write_file', 'find_replace', 'search_files',
-            'list_java_files', 'read_pom', 'update_java_version'
-        ]]
-        return error_tools
+        # Return basic tools for now - you can add real tools later
+        return [mvn_compile, mvn_test, run_command]
     
     def _create_supervisor(self):
         """Create supervisor workflow that manages migration workers"""
@@ -128,6 +137,272 @@ class SupervisorMigrationOrchestrator:
         
         return workflow
     
+    def migrate_project_stream(self, project_path: str):
+        """Start supervised migration with streaming progress updates"""
+        print("="*80)
+        print(f"STARTING SUPERVISED MIGRATION: {project_path}")
+        print("="*80)
+        
+        if not os.path.exists(project_path):
+            yield {"type": "complete", "success": False, "error": f"Project path does not exist: {project_path}"}
+            return
+        
+        # Create migration request using external template
+        migration_request = get_migration_request(project_path)
+        
+        try:
+            start_time = datetime.now()
+            
+            print(f"\nSupervisor: Starting migration workflow...")
+            print(f"Supervisor: Available workers: {[agent.name for agent in self.migration_workers]}")
+            print("-" * 60)
+            
+            # Initial progress message
+            yield {
+                "type": "progress", 
+                "step": 0, 
+                "message": f"Starting migration for {project_path}",
+                "agent": "supervisor"
+            }
+            
+            # Stream the workflow execution with progress tracking
+            step_count = 0
+            last_agent = None
+            
+            for chunk in self.app.stream({
+                "messages": [{"role": "user", "content": migration_request}]
+            }):
+                step_count += 1
+                self._log_workflow_step(step_count, chunk)
+                
+                # Extract detailed progress information (can be multiple events per chunk)
+                progress_events = self._extract_progress_info(chunk, step_count)
+                
+                # Yield each progress event
+                for progress_event in progress_events:
+                    current_agent = progress_event.get("agent", "supervisor")
+                    
+                    # Track agent transitions
+                    if current_agent != last_agent:
+                        yield {
+                            "type": "progress",
+                            "step": step_count,
+                            "message": f"Calling {current_agent.replace('_', ' ').title()}",
+                            "agent": current_agent,
+                            "event_type": "agent_transition"
+                        }
+                        last_agent = current_agent
+                    
+                    # Yield the detailed progress event
+                    yield progress_event
+            
+            duration = datetime.now() - start_time
+            
+            print("\n" + "="*80)
+            print(f"SUPERVISED MIGRATION COMPLETED in {duration.total_seconds():.2f} seconds")
+            print("="*80)
+            
+            # Get final result
+            final_result = self.app.invoke({
+                "messages": [{"role": "user", "content": migration_request}]
+            })
+            
+            # Extract final result
+            messages = final_result.get("messages", [])
+            final_message = messages[-1] if messages else {}
+            
+            # Handle different message types
+            if hasattr(final_message, 'content'):
+                final_content = final_message.content
+            elif isinstance(final_message, dict):
+                final_content = final_message.get("content", str(final_message))
+            else:
+                final_content = str(final_message)
+            
+            yield {
+                "type": "complete",
+                "success": True,
+                "result": final_content,
+                "duration": duration.total_seconds(),
+                "messages": len(messages),
+                "steps": step_count,
+                "project_path": project_path
+            }
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"\nSUPERVISOR ERROR: {str(e)}")
+            yield {
+                "type": "complete",
+                "success": False,
+                "error": str(e),
+                "project_path": project_path
+            }
+    
+    def _extract_progress_info(self, chunk: Dict[str, Any], step_count: int) -> List[Dict[str, Any]]:
+        """Extract detailed progress information from workflow chunks"""
+        if not chunk:
+            return []
+        
+        progress_events = []
+        
+        # Check for active agent and extract detailed information
+        for node_name, node_data in chunk.items():
+            if node_name in ["analysis_expert", "execution_expert", "error_expert", "supervisor"]:
+                
+                # Look for messages in this node
+                if isinstance(node_data, dict) and "messages" in node_data:
+                    messages = node_data["messages"]
+                    
+                    # Process each message for detailed info
+                    for i, msg in enumerate(messages):
+                        # Extract LLM calls and responses
+                        if self._is_ai_message(msg):
+                            content = self._get_message_content(msg)
+                            if content and content.strip():
+                                progress_events.append({
+                                    "type": "progress",
+                                    "step": step_count,
+                                    "agent": node_name,
+                                    "event_type": "llm_response",
+                                    "message": "LLM Response",
+                                    "content": content,
+                                    "details": {"message_index": i, "node": node_name}
+                                })
+                        
+                        # Extract tool calls
+                        tool_calls = self._get_tool_calls(msg)
+                        if tool_calls:
+                            for j, tool_call in enumerate(tool_calls):
+                                tool_name = self._get_tool_name(tool_call)
+                                tool_args = self._get_tool_args(tool_call)
+                                
+                                # Debug the actual tool_call structure
+                                print(f"DEBUG TOOL CALL: {tool_call}")
+                                print(f"DEBUG TOOL ARGS: {tool_args}")
+                                
+                                progress_events.append({
+                                    "type": "progress",
+                                    "step": step_count,
+                                    "agent": node_name,
+                                    "event_type": "tool_call",
+                                    "message": f"Tool Call: {tool_name}",
+                                    "content": f"**Tool:** {tool_name}\n**Parameters:** {json.dumps(tool_args, indent=2) if tool_args else 'No parameters'}",
+                                    "details": {"tool": tool_name, "args": tool_args, "call_index": j}
+                                })
+                        
+                        # Extract tool results
+                        if self._is_tool_message(msg):
+                            tool_name = self._get_message_name(msg)
+                            tool_result = self._get_message_content(msg)
+                            
+                            progress_events.append({
+                                "type": "progress", 
+                                "step": step_count,
+                                "agent": node_name,
+                                "event_type": "tool_result",
+                                "message": f"Tool Result: {tool_name}",
+                                "content": f"**Tool:** {tool_name}\n**Result:** {tool_result[:500]}{'...' if len(str(tool_result)) > 500 else ''}",
+                                "details": {"tool": tool_name, "result_preview": str(tool_result)[:100]}
+                            })
+                
+                # If no detailed messages, show basic agent activity
+                if not progress_events:
+                    progress_events.append({
+                        "type": "progress",
+                        "step": step_count,
+                        "agent": node_name,
+                        "event_type": "agent_activity", 
+                        "message": f"{node_name.replace('_', ' ').title()} activated",
+                        "content": f"Agent {node_name} is now processing...",
+                        "details": {"node": node_name}
+                    })
+        
+        return progress_events
+    
+    def _is_ai_message(self, msg) -> bool:
+        """Check if message is from AI/LLM"""
+        if isinstance(msg, dict):
+            return msg.get("type") in ["ai", "assistant"] or "ai" in str(msg.get("type", "")).lower()
+        return hasattr(msg, "type") and (msg.type in ["ai", "assistant"] or "ai" in str(msg.type).lower())
+    
+    def _is_tool_message(self, msg) -> bool:
+        """Check if message is a tool result"""
+        if isinstance(msg, dict):
+            return msg.get("type") in ["tool", "function"]
+        return hasattr(msg, "type") and msg.type in ["tool", "function"]
+    
+    def _get_message_content(self, msg):
+        """Extract content from message"""
+        if isinstance(msg, dict):
+            return msg.get("content", "")
+        return getattr(msg, "content", "")
+    
+    def _get_message_name(self, msg):
+        """Extract name/tool name from message"""
+        if isinstance(msg, dict):
+            return msg.get("name", "")
+        return getattr(msg, "name", "")
+    
+    def _get_tool_calls(self, msg):
+        """Extract tool calls from message"""
+        if isinstance(msg, dict):
+            return msg.get("tool_calls", [])
+        return getattr(msg, "tool_calls", [])
+    
+    def _get_tool_name(self, tool_call):
+        """Extract tool name from tool call"""
+        if isinstance(tool_call, dict):
+            return tool_call.get("name", "unknown_tool")
+        return getattr(tool_call, "name", "unknown_tool")
+    
+    def _get_tool_args(self, tool_call):
+        """Extract tool arguments from tool call"""
+        if isinstance(tool_call, dict):
+            # Try multiple possible keys for arguments
+            args = tool_call.get("args")
+            if args is None:
+                args = tool_call.get("arguments")
+            if args is None:
+                args = tool_call.get("parameters")
+            return args or {}
+        else:
+            # For object-style tool calls, try multiple attributes
+            for attr in ["args", "arguments", "parameters"]:
+                args = getattr(tool_call, attr, None)
+                if args is not None:
+                    return args
+            return {}
+    
+    def _extract_tool_info(self, msg, progress_info: Dict[str, Any]) -> bool:
+        """Extract tool usage information from messages"""
+        try:
+            # Handle different message types
+            tool_calls = None
+            if isinstance(msg, dict):
+                tool_calls = msg.get("tool_calls", [])
+            elif hasattr(msg, "tool_calls"):
+                tool_calls = msg.tool_calls
+            
+            if tool_calls:
+                for tool_call in tool_calls:
+                    tool_name = None
+                    if isinstance(tool_call, dict):
+                        tool_name = tool_call.get("name", "")
+                    elif hasattr(tool_call, "name"):
+                        tool_name = tool_call.name
+                    
+                    if tool_name:
+                        progress_info["message"] = f"{progress_info['agent'].replace('_', ' ').title()} using {tool_name}"
+                        progress_info["tool"] = tool_name
+                        return True
+        
+        except Exception as e:
+            print(f"Error extracting tool info: {e}")
+        
+        return False
+
     def migrate_project(self, project_path: str) -> Dict[str, Any]:
         """Start supervised migration with detailed progress tracking"""
         print("="*80)

@@ -1,3 +1,7 @@
+"""
+Migration Server with LangGraph Streaming Support
+Integrates the SupervisorMigrationOrchestrator with LangGraph SDK-compatible streaming
+"""
 import os
 import sys
 from typing import Dict, Any, List
@@ -11,15 +15,14 @@ import uuid
 import json
 import asyncio
 
-# Add parent directory to Python path for migration imports
-sys.path.append('/Users/abhisheksankar/Desktop/PyTorch-Notebooks')
+# Add parent directory to path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-# Import migration supervisor
 from migration.supervisor_orchestrator import SupervisorMigrationOrchestrator
 
 load_dotenv()
 
-app = FastAPI(title="LangGraph Supervisor Server")
+app = FastAPI(title="LangGraph Migration Server")
 
 # In-memory storage for threads and messages
 threads_db = {}
@@ -34,11 +37,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize migration supervisor
-print("Initializing Migration Supervisor...")
-supervisor = SupervisorMigrationOrchestrator()
-print("Migration supervisor ready!")
+# Initialize migration orchestrator
+print("Initializing Migration Orchestrator...")
+migration_orchestrator = SupervisorMigrationOrchestrator()
+print("Migration orchestrator ready!")
 
+class MigrationRequest(BaseModel):
+    project_path: str
+    
 class ChatMessage(BaseModel):
     content: str
     type: str = "human"
@@ -47,60 +53,43 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     thread_id: str = "default"
 
-class ChatResponse(BaseModel):
-    content: str
-    type: str = "ai"
-
 @app.get("/")
 async def root():
-    return {"message": "LangGraph Supervisor Server is running!"}
+    return {"message": "LangGraph Migration Server is running!"}
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-@app.post("/chat")
-async def chat(request: ChatRequest):
-    """Main chat endpoint for the migration supervisor"""
-    try:
-        # Get the latest message content (weather query)
-        if not request.messages:
-            raise HTTPException(status_code=400, detail="No messages provided")
-        
-        latest_message = request.messages[-1]
-        
-        # Handle different content types (string or list)
-        if isinstance(latest_message.content, list):
-            # If it's a list, extract text from the first text element
-            query = ""
-            for item in latest_message.content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    query = item.get("text", "").strip()
-                    break
-                elif isinstance(item, str):
-                    query = item.strip()
-                    break
-            if not query:
-                query = str(latest_message.content).strip()
-        else:
-            query = str(latest_message.content).strip()
-        
-        # Process weather query
-        result = None
-        for progress in supervisor.get_weather_stream(query):
-            if progress.get("type") == "complete":
-                result = progress
-                break
-        
-        if result and result.get('success'):
-            content = result.get('result', 'Weather query completed')
-        else:
-            content = f"Weather query failed: {result.get('error', 'Unknown error') if result else 'No result'}"
-        
-        return ChatResponse(content=content, type="ai")
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/info")
+async def get_info():
+    """Return server info"""
+    return {
+        "version": "1.0.0",
+        "name": "Migration Supervisor Server"
+    }
+
+@app.get("/assistants/{assistant_id}")
+async def get_assistant(assistant_id: str):
+    """Get assistant details"""
+    return {
+        "assistant_id": assistant_id,
+        "name": "Migration Supervisor",
+        "description": "Multi-agent supervisor for Java project migrations",
+        "config": {},
+        "graph_id": assistant_id
+    }
+
+@app.get("/assistants")
+async def get_assistants():
+    """Return available assistants"""
+    return [
+        {
+            "assistant_id": "supervisor",
+            "name": "Migration Supervisor", 
+            "description": "Multi-agent supervisor for Java project migrations"
+        }
+    ]
 
 @app.get("/threads")
 async def get_threads():
@@ -110,7 +99,6 @@ async def get_threads():
 @app.post("/threads")
 async def create_thread():
     """Create a new thread"""
-    import uuid
     thread_id = str(uuid.uuid4())
     return {"thread_id": thread_id}
 
@@ -156,90 +144,9 @@ async def get_thread_history(thread_id: str, request: Dict[str, Any]):
     
     return history
 
-@app.post("/threads/{thread_id}/runs")
-async def create_run(thread_id: str, request: Dict[str, Any]):
-    """LangGraph-compatible runs endpoint for migration"""
-    try:
-        # Extract input from request
-        input_data = request.get("input", {})
-        messages = input_data.get("messages", [])
-        
-        # Get the latest message content (weather query)
-        if not messages:
-            raise HTTPException(status_code=400, detail="No messages provided")
-        
-        latest_message = messages[-1]
-        if isinstance(latest_message, dict):
-            content = latest_message.get("content", "")
-            # Handle different content types (string or list)
-            if isinstance(content, list):
-                query = ""
-                for item in content:
-                    if isinstance(item, dict) and item.get("type") == "text":
-                        query = item.get("text", "").strip()
-                        break
-                    elif isinstance(item, str):
-                        query = item.strip()
-                        break
-                if not query:
-                    query = str(content).strip()
-            else:
-                query = str(content).strip()
-        else:
-            query = str(latest_message).strip()
-        
-        # Process weather query
-        result = None
-        for progress in supervisor.get_weather_stream(query):
-            if progress.get("type") == "complete":
-                result = progress
-                break
-        
-        # Format response for LangGraph chat UI
-        return {
-            "run_id": f"run_{thread_id}",
-            "thread_id": thread_id,
-            "status": "success" if result.get('success') else "error",
-            "output": result
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/assistants/{assistant_id}")
-async def get_assistant(assistant_id: str):
-    """Get assistant details"""
-    return {
-        "assistant_id": assistant_id,
-        "name": "Migration Supervisor",
-        "description": "Multi-agent supervisor for Java project migrations",
-        "config": {},
-        "graph_id": assistant_id
-    }
-
-@app.get("/assistants")
-async def get_assistants():
-    """Return available assistants"""
-    return [
-        {
-            "assistant_id": "supervisor",
-            "name": "Migration Supervisor", 
-            "description": "Multi-agent supervisor for Java project migrations"
-        }
-    ]
-
-@app.get("/info")
-async def get_info():
-    """Return server info"""
-    return {
-        "version": "1.0.0",
-        "name": "Migration Supervisor Server"
-    }
-
 @app.post("/threads/search")
 async def search_threads(request: Dict[str, Any]):
     """Search for threads"""
-    # Return all threads with conversation previews
     threads = []
     for thread_id, thread_data in threads_db.items():
         # Get latest message for preview
@@ -260,15 +167,15 @@ async def search_threads(request: Dict[str, Any]):
             "created_at": thread_data["created_at"],
             "updated_at": thread_data["updated_at"],
             "metadata": thread_data["metadata"],
-            "values": {"messages": thread_messages[-5:] if thread_messages else []},  # Last 5 messages for preview
-            "name": latest_message or f"Thread {thread_id[:8]}"
+            "values": {"messages": thread_messages[-5:] if thread_messages else []},
+            "name": latest_message or f"Migration {thread_id[:8]}"
         })
     
     return threads
 
 @app.post("/threads/{thread_id}/runs/stream")
-async def stream_run(thread_id: str, request: Dict[str, Any]):
-    """LangGraph-compatible streaming endpoint"""
+async def stream_migration_run(thread_id: str, request: Dict[str, Any]):
+    """LangGraph-compatible streaming endpoint for migrations"""
     
     async def generate_stream():
         try:
@@ -288,7 +195,6 @@ async def stream_run(thread_id: str, request: Dict[str, Any]):
             
             # Generate run metadata
             run_id = f"run_{thread_id}_{uuid.uuid4()}"
-            checkpoint_id = str(uuid.uuid4())
             
             # LangGraph expected format: start with metadata event
             yield f"event: metadata\n"
@@ -321,72 +227,72 @@ async def stream_run(thread_id: str, request: Dict[str, Any]):
             else:
                 project_path = str(latest_message).strip()
             
-            print(f"STREAMING: Processing migration for project: {project_path}")
+            print(f"STREAMING: Starting migration for: {project_path}")
             
             # Convert messages to LangGraph format
-            conversation_messages = []
+            langgraph_messages = []
             for msg in messages:
                 if isinstance(msg, dict):
-                    conversation_messages.append({
+                    langgraph_messages.append({
                         "id": msg.get("id", str(uuid.uuid4())),
                         "type": msg.get("type", "human"),
                         "content": msg.get("content", "")
                     })
             
-            # Start streaming the supervisor process
-            final_result = None
-            step_count = 0
+            # Add initial human message
+            if not langgraph_messages:
+                langgraph_messages.append({
+                    "id": str(uuid.uuid4()),
+                    "type": "human",
+                    "content": f"Migrate project at {project_path}"
+                })
             
-            # Stream migration execution - append each step as a new message
-            for progress in supervisor.migrate_project_stream(project_path):
+            # Start migration streaming
+            final_result = None
+            
+            # Stream migration execution with real-time progress
+            for progress in migration_orchestrator.migrate_project_stream(project_path):
+                
                 if progress.get("type") == "progress":
-                    # Create AI message from actual migration progress
+                    # Create an AI message for progress updates
                     agent_name = progress.get("agent", "supervisor")
-                    step = progress.get("step", step_count)
-                    message_title = progress.get("message", "Working...")
+                    step = progress.get("step", 0)
+                    message_content = progress.get("message", "Working...")
                     
-                    # Get the detailed content (LLM responses, tool params, etc.)
-                    detailed_content = progress.get("content", "")
-                    event_type = progress.get("event_type", "activity")
-                    
-                    # Create comprehensive message content
-                    if detailed_content and detailed_content.strip():
-                        # Show both title and detailed content
-                        full_content = f"**[{agent_name.upper()}] {message_title}**\n\n{detailed_content}"
-                    else:
-                        # Fallback to just the title
-                        full_content = f"[{agent_name.upper()}] {message_title}"
-                        
-                        # Add tool info if available
-                        if progress.get("tool"):
-                            full_content += f" (using {progress['tool']})"
+                    # Add tool info if available
+                    if progress.get("tool"):
+                        message_content += f" (using {progress['tool']})"
                     
                     ai_message = {
-                        "id": f"progress_{step}_{event_type}_{uuid.uuid4()}",
+                        "id": f"progress_{step}_{uuid.uuid4()}",
                         "type": "ai", 
-                        "content": full_content
+                        "content": f"[{agent_name.upper()}] {message_content}"
                     }
                     
                     # Append to conversation instead of replacing
-                    conversation_messages.append(ai_message)
+                    langgraph_messages.append(ai_message)
                     
                     print(f"MIGRATION: YIELDING PROGRESS: Step {step} - {agent_name}")
                     
-                    # Send values event with growing conversation
+                    # Send values event in LangGraph format
                     yield f"event: values\n"
-                    yield f"data: {json.dumps({'messages': conversation_messages.copy()})}\n\n"
+                    yield f"data: {json.dumps({'messages': langgraph_messages.copy()})}\n\n"
+                    
+                    # Small delay to ensure streaming visibility
+                    import time
+                    time.sleep(0.1)
                     
                 elif progress.get("type") == "complete":
                     final_result = progress
-                    step_count = progress.get("steps", step_count)
                     break
             
             # Send final result
             if final_result:
+                final_content = ""
                 if final_result.get('success'):
                     result_text = final_result.get('result', 'Migration completed successfully')
                     duration = final_result.get('duration', 0)
-                    steps = final_result.get('steps', step_count)
+                    steps = final_result.get('steps', 0)
                     
                     final_content = f"""Migration completed successfully! ✅
 
@@ -411,16 +317,15 @@ Please check the logs for more details."""
                     "content": final_content
                 }
                 
-                # Append final message to conversation
-                conversation_messages.append(final_message)
+                final_messages = langgraph_messages + [final_message]
                 
                 # Store conversation
-                messages_db[thread_id] = conversation_messages
+                messages_db[thread_id] = final_messages
                 threads_db[thread_id]["updated_at"] = datetime.now().isoformat()
                 
                 # Send final values
                 yield f"event: values\n"
-                yield f"data: {json.dumps({'messages': conversation_messages})}\n\n"
+                yield f"data: {json.dumps({'messages': final_messages})}\n\n"
             
             # End the stream properly
             yield f"event: end\n"
@@ -447,6 +352,6 @@ Please check the logs for more details."""
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting Migration Supervisor Server on port 2024...")
+    print("Starting Migration Supervisor Server on port 2025...")
     print("Available agents: analysis_expert, execution_expert, error_expert")
-    uvicorn.run(app, host="0.0.0.0", port=2024)
+    uvicorn.run(app, host="0.0.0.0", port=2025)
